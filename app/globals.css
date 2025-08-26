@@ -1,0 +1,185 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .game-container {
+    @apply bg-card border border-border rounded-lg p-6 shadow-lg;
+  }
+  
+  .game-button {
+    @apply bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium transition-colors hover:bg-primary/90 active:scale-95;
+  }
+  
+  .game-button-secondary {
+    @apply bg-secondary text-secondary-foreground px-4 py-2 rounded-md font-medium transition-colors hover:bg-secondary/80 active:scale-95;
+  }
+  
+  .game-cell {
+    @apply border border-border bg-muted hover:bg-muted/80 transition-colors cursor-pointer flex items-center justify-center font-bold text-2xl;
+  }
+  
+  .score-display {
+    @apply bg-card border border-border rounded-md px-4 py-2 font-mono text-lg;
+  }
+  
+  .leaderboard-item {
+    @apply bg-card border border-border rounded-md p-4 flex justify-between items-center;
+  }
+  
+  .neon-glow {
+    @apply shadow-glow;
+  }
+  
+  .neon-glow-green {
+    @apply shadow-glow-green;
+  }
+  
+  .neon-glow-red {
+    @apply shadow-glow-red;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
+}
+
+/* Custom animations for games */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.fade-in-scale {
+  animation: fadeInScale 0.3s ease-out;
+}
+
+.shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+.pop {
+  animation: pop 0.3s ease-in-out;
+}
+
+/* Game-specific styles */
+.tic-tac-toe-cell {
+  @apply w-20 h-20 md:w-24 md:h-24 text-3xl md:text-4xl;
+}
+
+.snake-cell {
+  @apply w-4 h-4 border border-border/20;
+}
+
+.snake-body {
+  @apply bg-accent;
+}
+
+.snake-head {
+  @apply bg-accent neon-glow-green;
+}
+
+.snake-food {
+  @apply bg-destructive neon-glow-red rounded-full;
+}
+
+.memory-card {
+  @apply w-16 h-16 md:w-20 md:h-20 bg-card border-2 border-border rounded-lg cursor-pointer transition-all duration-300 flex items-center justify-center text-2xl font-bold;
+}
+
+.memory-card.flipped {
+  @apply bg-primary text-primary-foreground neon-glow;
+}
+
+.memory-card.matched {
+  @apply bg-accent text-accent-foreground neon-glow-green;
+}
+
+.puzzle-tile {
+  @apply w-16 h-16 md:w-20 md:h-20 bg-card border border-border rounded cursor-pointer transition-all duration-200 flex items-center justify-center font-bold text-lg hover:bg-card/80;
+}
+
+.puzzle-tile.empty {
+  @apply bg-transparent border-dashed border-muted cursor-default hover:bg-transparent;
+}
+
+.mole-hole {
+  @apply w-20 h-20 bg-muted border-4 border-border rounded-full cursor-pointer transition-all duration-200 flex items-center justify-center text-4xl;
+}
+
+.mole-active {
+  @apply bg-accent text-accent-foreground neon-glow-green;
+}
+
+.mole-hit {
+  @apply bg-destructive text-destructive-foreground neon-glow-red;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .tic-tac-toe-cell {
+    @apply w-16 h-16 text-2xl;
+  }
+  
+  .memory-card {
+    @apply w-12 h-12 text-lg;
+  }
+  
+  .puzzle-tile {
+    @apply w-12 h-12 text-sm;
+  }
+  
+  .mole-hole {
+    @apply w-16 h-16 text-3xl;
+  }
+}
