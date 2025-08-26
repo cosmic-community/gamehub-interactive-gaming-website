@@ -1,23 +1,31 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { submitScore } from '@/lib/cosmic'
 import type { Mole, GameState } from '@/types'
 
-const BOARD_SIZE = 9
-const GAME_DURATION = 30 // seconds
+const GRID_SIZE = 9
+const GAME_DURATION = 30000 // 30 seconds
+const MOLE_SHOW_TIME = 1500 // 1.5 seconds
+const MOLE_HIT_TIME = 500 // 0.5 seconds
 
 export default function WhackAMole() {
   const [moles, setMoles] = useState<Mole[]>([])
   const [gameState, setGameState] = useState<GameState>('idle')
   const [score, setScore] = useState(0)
-  const [timeLeft, setTimeLeft] = useState(GAME_DURATION)
+  const [timeLeft, setTimeLeft] = useState(GAME_DURATION / 1000)
   const [highScore, setHighScore] = useState(0)
-  const [playerName, setPlayerName] = useState('')
-  const [isSubmittingScore, setIsSubmittingScore] = useState(false)
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium')
 
-  // Load high score from localStorage
+  // Initialize moles
+  useEffect(() => {
+    const initialMoles: Mole[] = Array.from({ length: GRID_SIZE }, (_, index) => ({
+      id: index,
+      isActive: false,
+      wasHit: false
+    }))
+    setMoles(initialMoles)
+  }, [])
+
+  // Load high score
   useEffect(() => {
     const savedHighScore = localStorage.getItem('whack-a-mole-high-score')
     if (savedHighScore) {
@@ -25,307 +33,230 @@ export default function WhackAMole() {
     }
   }, [])
 
-  // Initialize moles
-  const initializeMoles = () => {
-    const initialMoles: Mole[] = Array.from({ length: BOARD_SIZE }, (_, i) => ({
-      id: i,
-      isActive: false,
-      wasHit: false
-    }))
-    setMoles(initialMoles)
-  }
-
-  // Get mole spawn interval based on difficulty
-  const getMoleInterval = () => {
-    switch (difficulty) {
-      case 'easy': return 1500
-      case 'medium': return 1000
-      case 'hard': return 700
-      default: return 1000
-    }
-  }
-
-  // Get mole active duration based on difficulty
-  const getMoleDuration = () => {
-    switch (difficulty) {
-      case 'easy': return 2000
-      case 'medium': return 1500
-      case 'hard': return 1000
-      default: return 1500
-    }
-  }
-
-  // Spawn a random mole
-  const spawnMole = useCallback(() => {
-    setMoles(currentMoles => {
-      const inactiveMoles = currentMoles
-        .map((mole, index) => ({ ...mole, index }))
-        .filter(mole => !mole.isActive)
-      
-      if (inactiveMoles.length === 0) return currentMoles
-
-      const randomMole = inactiveMoles[Math.floor(Math.random() * inactiveMoles.length)]
-      const newMoles = [...currentMoles]
-      newMoles[randomMole.index] = {
-        ...newMoles[randomMole.index],
-        isActive: true,
-        wasHit: false
-      }
-
-      // Hide mole after duration
-      setTimeout(() => {
-        setMoles(prevMoles => {
-          const updatedMoles = [...prevMoles]
-          if (updatedMoles[randomMole.index] && !updatedMoles[randomMole.index].wasHit) {
-            updatedMoles[randomMole.index] = {
-              ...updatedMoles[randomMole.index],
-              isActive: false
-            }
-          }
-          return updatedMoles
-        })
-      }, getMoleDuration())
-
-      return newMoles
-    })
-  }, [difficulty])
-
-  const startGame = () => {
-    initializeMoles()
-    setGameState('playing')
-    setScore(0)
-    setTimeLeft(GAME_DURATION)
-  }
-
-  const resetGame = () => {
-    initializeMoles()
-    setGameState('idle')
-    setScore(0)
-    setTimeLeft(GAME_DURATION)
-  }
-
-  const whackMole = (moleId: number) => {
-    if (gameState !== 'playing') return
-
-    setMoles(currentMoles => {
-      const newMoles = [...currentMoles]
-      const mole = newMoles[moleId]
-      
-      if (mole && mole.isActive && !mole.wasHit) {
-        newMoles[moleId] = {
-          ...mole,
-          isActive: false,
-          wasHit: true
-        }
-        setScore(prev => prev + 10)
-        
-        // Show hit state briefly
-        setTimeout(() => {
-          setMoles(prevMoles => {
-            const updatedMoles = [...prevMoles]
-            if (updatedMoles[moleId]) {
-              updatedMoles[moleId] = {
-                ...updatedMoles[moleId],
-                wasHit: false
-              }
-            }
-            return updatedMoles
-          })
-        }, 300)
-      }
-      
-      return newMoles
-    })
-  }
-
   // Game timer
   useEffect(() => {
-    let interval: NodeJS.Timeout
-    
-    if (gameState === 'playing' && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft(prev => prev - 1)
-      }, 1000)
-    } else if (timeLeft === 0 && gameState === 'playing') {
-      setGameState('gameOver')
-      
-      // Update high score
-      if (score > highScore) {
-        setHighScore(score)
-        localStorage.setItem('whack-a-mole-high-score', score.toString())
-        
-        // Submit score if player name is provided
-        if (playerName.trim() && !isSubmittingScore) {
-          setIsSubmittingScore(true)
-          submitScore('whack-a-mole', playerName.trim(), score)
-            .catch(error => console.error('Failed to submit score:', error))
-            .finally(() => setIsSubmittingScore(false))
-        }
-      }
-    }
-    
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [gameState, timeLeft, score, highScore, playerName, isSubmittingScore])
+    if (gameState !== 'playing') return
 
-  // Mole spawning
+    const timer = setInterval(() => {
+      setTimeLeft(prevTime => {
+        const newTime = prevTime - 1
+        if (newTime <= 0) {
+          setGameState('gameOver')
+          return 0
+        }
+        return newTime
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [gameState])
+
+  // Mole spawning logic
   useEffect(() => {
-    let interval: NodeJS.Timeout
+    if (gameState !== 'playing') return
+
+    const spawnMole = () => {
+      setMoles(prevMoles => {
+        const inactiveMoles = prevMoles.filter(mole => !mole.isActive)
+        if (inactiveMoles.length === 0) return prevMoles
+        
+        const randomMoleIndex = Math.floor(Math.random() * inactiveMoles.length)
+        const randomMole = inactiveMoles[randomMoleIndex]
+        
+        if (!randomMole) return prevMoles
+
+        const newMoles = prevMoles.map(mole => 
+          mole.id === randomMole.id 
+            ? { ...mole, isActive: true, wasHit: false }
+            : mole
+        )
+
+        // Schedule mole to hide
+        setTimeout(() => {
+          setMoles(currentMoles => 
+            currentMoles.map(mole => 
+              mole.id === randomMole.id && !mole.wasHit
+                ? { ...mole, isActive: false }
+                : mole
+            )
+          )
+        }, MOLE_SHOW_TIME)
+
+        return newMoles
+      })
+    }
+
+    const spawnInterval = setInterval(spawnMole, 800)
+    return () => clearInterval(spawnInterval)
+  }, [gameState])
+
+  // Handle mole hit
+  const handleMoleHit = useCallback((moleId: number) => {
+    if (gameState !== 'playing') return
+
+    setMoles(prevMoles => {
+      const targetMole = prevMoles.find(mole => mole.id === moleId)
+      if (!targetMole || !targetMole.isActive || targetMole.wasHit) {
+        return prevMoles
+      }
+
+      const newMoles = prevMoles.map(mole => 
+        mole.id === moleId 
+          ? { ...mole, wasHit: true }
+          : mole
+      )
+
+      // Hide the hit mole after a short delay
+      setTimeout(() => {
+        setMoles(currentMoles => 
+          currentMoles.map(mole => 
+            mole.id === moleId 
+              ? { ...mole, isActive: false, wasHit: false }
+              : mole
+          )
+        )
+      }, MOLE_HIT_TIME)
+
+      return newMoles
+    })
+
+    setScore(prevScore => prevScore + 10)
+  }, [gameState])
+
+  // Start game
+  const startGame = () => {
+    setScore(0)
+    setTimeLeft(GAME_DURATION / 1000)
+    setGameState('playing')
+    setMoles(prevMoles => 
+      prevMoles.map(mole => ({ ...mole, isActive: false, wasHit: false }))
+    )
+  }
+
+  // End game
+  useEffect(() => {
+    if (gameState === 'gameOver' && score > highScore) {
+      setHighScore(score)
+      localStorage.setItem('whack-a-mole-high-score', score.toString())
+    }
+  }, [gameState, score, highScore])
+
+  // Reset game
+  const resetGame = () => {
+    setGameState('idle')
+    setScore(0)
+    setTimeLeft(GAME_DURATION / 1000)
+    setMoles(prevMoles => 
+      prevMoles.map(mole => ({ ...mole, isActive: false, wasHit: false }))
+    )
+  }
+
+  const getMoleClassName = (mole: Mole): string => {
+    let className = 'mole-hole transition-all duration-200'
     
-    if (gameState === 'playing') {
-      interval = setInterval(spawnMole, getMoleInterval())
+    if (mole.wasHit) {
+      className += ' mole-hit scale-110'
+    } else if (mole.isActive) {
+      className += ' mole-active scale-110'
+    } else {
+      className += ' hover:bg-muted/60'
     }
     
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [gameState, spawnMole])
+    return className
+  }
+
+  const getMoleEmoji = (mole: Mole): string => {
+    if (mole.wasHit) return '💥'
+    if (mole.isActive) return '🐹'
+    return '🕳️'
+  }
 
   return (
-    <div className="game-container space-y-6">
+    <div className="space-y-6">
       {/* Game Header */}
-      <div className="text-center space-y-4">
-        <h2 className="text-3xl font-bold">Whack-a-Mole</h2>
+      <div className="text-center space-y-2">
+        <h2 className="text-3xl font-bold">🔨 Whack-a-Mole</h2>
+        <p className="text-muted-foreground">
+          Hit the moles as they pop up! Quick reflexes required.
+        </p>
+      </div>
+
+      {/* Game Stats */}
+      <div className="flex justify-center gap-6">
+        <div className="score-display">
+          <div className="text-sm text-muted-foreground">Score</div>
+          <div className="text-xl font-bold">{score}</div>
+        </div>
         
-        {/* Player Name Input */}
-        <div className="max-w-sm mx-auto">
-          <input
-            type="text"
-            placeholder="Enter your name"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            className="w-full px-3 py-2 bg-secondary border border-border rounded-md text-center"
-            maxLength={20}
-          />
+        <div className="score-display">
+          <div className="text-sm text-muted-foreground">High Score</div>
+          <div className="text-xl font-bold text-accent">{highScore}</div>
         </div>
-
-        {/* Difficulty Selection */}
-        <div className="flex justify-center gap-2">
-          <button
-            onClick={() => setDifficulty('easy')}
-            className={`px-3 py-1 rounded text-sm ${
-              difficulty === 'easy' ? 'bg-accent text-accent-foreground' : 'bg-secondary text-secondary-foreground'
-            }`}
-            disabled={gameState === 'playing'}
-          >
-            Easy
-          </button>
-          <button
-            onClick={() => setDifficulty('medium')}
-            className={`px-3 py-1 rounded text-sm ${
-              difficulty === 'medium' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
-            }`}
-            disabled={gameState === 'playing'}
-          >
-            Medium
-          </button>
-          <button
-            onClick={() => setDifficulty('hard')}
-            className={`px-3 py-1 rounded text-sm ${
-              difficulty === 'hard' ? 'bg-destructive text-destructive-foreground' : 'bg-secondary text-secondary-foreground'
-            }`}
-            disabled={gameState === 'playing'}
-          >
-            Hard
-          </button>
+        
+        <div className="score-display">
+          <div className="text-sm text-muted-foreground">Time</div>
+          <div className="text-xl font-bold">{timeLeft}s</div>
         </div>
       </div>
 
-      {/* Score Display */}
-      <div className="grid grid-cols-3 gap-4 max-w-md mx-auto">
-        <div className="score-display text-center">
-          <div className="text-2xl font-bold text-primary">{score}</div>
-          <div className="text-xs text-muted-foreground">Score</div>
-        </div>
-        <div className="score-display text-center">
-          <div className="text-2xl font-bold text-destructive">{timeLeft}</div>
-          <div className="text-xs text-muted-foreground">Time Left</div>
-        </div>
-        <div className="score-display text-center">
-          <div className="text-2xl font-bold text-accent">{highScore}</div>
-          <div className="text-xs text-muted-foreground">High Score</div>
-        </div>
-      </div>
-
-      {/* Game Board */}
-      <div className="max-w-md mx-auto">
-        <div className="grid grid-cols-3 gap-4 p-6">
+      {/* Game Grid */}
+      <div className="flex justify-center">
+        <div className="grid grid-cols-3 gap-4 p-6 bg-card border border-border rounded-lg">
           {moles.map((mole) => (
             <button
               key={mole.id}
-              onClick={() => whackMole(mole.id)}
-              className={`mole-hole transition-all duration-200 ${
-                mole.wasHit
-                  ? 'mole-hit scale-110'
-                  : mole.isActive
-                    ? 'mole-active hover:scale-110'
-                    : 'hover:bg-muted/60'
-              }`}
+              className={getMoleClassName(mole)}
+              onClick={() => handleMoleHit(mole.id)}
               disabled={gameState !== 'playing'}
             >
-              {mole.wasHit ? '💥' : mole.isActive ? '🐹' : '🕳️'}
+              {getMoleEmoji(mole)}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Instructions */}
-      <div className="text-center text-sm text-muted-foreground">
-        <p>Hit the moles as they pop up! You have {GAME_DURATION} seconds.</p>
+      {/* Game Controls */}
+      <div className="flex justify-center gap-4">
+        {gameState === 'idle' && (
+          <button onClick={startGame} className="game-button">
+            🎮 Start Game
+          </button>
+        )}
+        
+        {gameState === 'playing' && (
+          <button onClick={resetGame} className="game-button-secondary">
+            🔄 Reset
+          </button>
+        )}
       </div>
 
-      {/* Game Status */}
-      <div className="text-center space-y-4">
-        {gameState === 'idle' && (
-          <div>
-            <p className="text-muted-foreground mb-4">Ready to start whacking?</p>
+      {/* Game Over Screen */}
+      {gameState === 'gameOver' && (
+        <div className="text-center space-y-4 p-6 bg-accent/10 border border-accent rounded-lg">
+          <div className="text-4xl">⏰</div>
+          <h3 className="text-2xl font-bold text-accent">Time's Up!</h3>
+          <p className="text-muted-foreground">
+            Final Score: <span className="font-bold">{score}</span>
+          </p>
+          {score === highScore && score > 0 && (
+            <p className="text-accent font-bold">🎉 New High Score!</p>
+          )}
+          <div className="flex justify-center gap-4">
             <button onClick={startGame} className="game-button">
-              🔨 Start Game
+              🎮 Play Again
+            </button>
+            <button onClick={resetGame} className="game-button-secondary">
+              🏠 Back to Menu
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {gameState === 'playing' && (
-          <div>
-            <div className="text-lg font-bold text-primary mb-4">
-              🔨 Whack those moles!
-            </div>
-            {/* Progress bar */}
-            <div className="max-w-md mx-auto bg-secondary rounded-full h-2">
-              <div 
-                className="bg-destructive h-2 rounded-full transition-all duration-1000"
-                style={{ width: `${((GAME_DURATION - timeLeft) / GAME_DURATION) * 100}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {gameState === 'gameOver' && (
-          <div className="space-y-4">
-            <div className="text-xl font-bold text-destructive">⏰ Time's Up!</div>
-            <div className="text-lg">
-              Final Score: <span className="font-bold text-primary">{score}</span>
-            </div>
-            
-            {score === highScore && score > 0 && (
-              <div className="text-lg font-bold text-accent">🎉 New High Score!</div>
-            )}
-            
-            {isSubmittingScore && (
-              <p className="text-muted-foreground">Saving score...</p>
-            )}
-            
-            <div className="flex gap-2 justify-center">
-              <button onClick={startGame} className="game-button">
-                🔄 Play Again
-              </button>
-              <button onClick={resetGame} className="game-button-secondary">
-                ⬅️ Main Menu
-              </button>
-            </div>
-          </div>
-        )}
+      {/* Instructions */}
+      <div className="text-center text-sm text-muted-foreground max-w-md mx-auto">
+        <p>
+          Click on the moles as they pop up from their holes. You have 30 seconds to get as many as possible!
+        </p>
       </div>
     </div>
   )

@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { submitScore } from '@/lib/cosmic'
 import type { SnakeSegment, Food, Direction, GameState } from '@/types'
 
-const BOARD_SIZE = 20
+const GRID_SIZE = 20
 const INITIAL_SNAKE: SnakeSegment[] = [{ x: 10, y: 10 }]
 const INITIAL_FOOD: Food = { x: 15, y: 15 }
+const GAME_SPEED = 150
 
 export default function SnakeGame() {
   const [snake, setSnake] = useState<SnakeSegment[]>(INITIAL_SNAKE)
@@ -15,9 +15,6 @@ export default function SnakeGame() {
   const [gameState, setGameState] = useState<GameState>('idle')
   const [score, setScore] = useState(0)
   const [highScore, setHighScore] = useState(0)
-  const [speed, setSpeed] = useState(200)
-  const [playerName, setPlayerName] = useState('')
-  const [isSubmittingScore, setIsSubmittingScore] = useState(false)
 
   // Load high score from localStorage
   useEffect(() => {
@@ -27,290 +24,270 @@ export default function SnakeGame() {
     }
   }, [])
 
-  const generateFood = useCallback((snakeBody: SnakeSegment[]): Food => {
-    let newFood: Food
-    do {
-      newFood = {
-        x: Math.floor(Math.random() * BOARD_SIZE),
-        y: Math.floor(Math.random() * BOARD_SIZE)
-      }
-    } while (snakeBody.some(segment => segment.x === newFood.x && segment.y === newFood.y))
-    
-    return newFood
-  }, [])
-
-  const resetGame = () => {
-    setSnake(INITIAL_SNAKE)
-    setFood(INITIAL_FOOD)
-    setDirection('right')
-    setGameState('idle')
-    setScore(0)
-    setSpeed(200)
-  }
-
-  const startGame = () => {
-    resetGame()
-    setGameState('playing')
-  }
-
-  const pauseGame = () => {
-    setGameState('paused')
-  }
-
-  const resumeGame = () => {
-    setGameState('playing')
-  }
-
-  const gameOver = async () => {
-    setGameState('gameOver')
-    
-    // Update high score
-    if (score > highScore) {
-      setHighScore(score)
-      localStorage.setItem('snake-high-score', score.toString())
-      
-      // Submit score if player name is provided
-      if (playerName.trim() && !isSubmittingScore) {
-        setIsSubmittingScore(true)
-        try {
-          await submitScore('snake', playerName.trim(), score)
-        } catch (error) {
-          console.error('Failed to submit score:', error)
-        } finally {
-          setIsSubmittingScore(false)
-        }
-      }
-    }
-  }
-
   // Game loop
   useEffect(() => {
     if (gameState !== 'playing') return
 
-    const gameLoop = setInterval(() => {
+    const gameInterval = setInterval(() => {
       setSnake(currentSnake => {
         const newSnake = [...currentSnake]
-        const head = { ...newSnake[0] }
+        const head = newSnake[0]
+        
+        if (!head) return currentSnake // Safety check
 
-        // Move head based on direction
+        let newHead: SnakeSegment = { x: 0, y: 0 }
+
+        // Calculate new head position based on direction
         switch (direction) {
-          case 'up': head.y -= 1; break
-          case 'down': head.y += 1; break
-          case 'left': head.x -= 1; break
-          case 'right': head.x += 1; break
+          case 'up':
+            newHead = { x: head.x, y: (head.y - 1 + GRID_SIZE) % GRID_SIZE }
+            break
+          case 'down':
+            newHead = { x: head.x, y: (head.y + 1) % GRID_SIZE }
+            break
+          case 'left':
+            newHead = { x: (head.x - 1 + GRID_SIZE) % GRID_SIZE, y: head.y }
+            break
+          case 'right':
+            newHead = { x: (head.x + 1) % GRID_SIZE, y: head.y }
+            break
         }
 
-        // Check wall collision
-        if (head.x < 0 || head.x >= BOARD_SIZE || head.y < 0 || head.y >= BOARD_SIZE) {
-          gameOver()
+        // Check collision with self
+        if (newSnake.some(segment => segment.x === newHead.x && segment.y === newHead.y)) {
+          setGameState('gameOver')
           return currentSnake
         }
 
-        // Check self collision
-        if (newSnake.some(segment => segment.x === head.x && segment.y === head.y)) {
-          gameOver()
-          return currentSnake
-        }
+        newSnake.unshift(newHead)
 
-        newSnake.unshift(head)
-
-        // Check food collision
-        if (head.x === food.x && head.y === food.y) {
-          const newFood = generateFood(newSnake)
-          setFood(newFood)
-          setScore(prev => prev + 10)
-          
-          // Increase speed slightly
-          setSpeed(prev => Math.max(100, prev - 2))
+        // Check if food was eaten
+        if (newHead.x === food.x && newHead.y === food.y) {
+          setScore(prevScore => prevScore + 10)
+          generateNewFood(newSnake)
         } else {
           newSnake.pop()
         }
 
         return newSnake
       })
-    }, speed)
+    }, GAME_SPEED)
 
-    return () => clearInterval(gameLoop)
-  }, [gameState, direction, food, speed, generateFood])
+    return () => clearInterval(gameInterval)
+  }, [gameState, direction, food])
 
-  // Keyboard controls
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if (gameState !== 'playing') return
+  const generateNewFood = (currentSnake: SnakeSegment[]) => {
+    let newFood: Food
+    do {
+      newFood = {
+        x: Math.floor(Math.random() * GRID_SIZE),
+        y: Math.floor(Math.random() * GRID_SIZE)
+      }
+    } while (currentSnake.some(segment => segment.x === newFood.x && segment.y === newFood.y))
+    
+    setFood(newFood)
+  }
 
-      const newDirection: Direction | null = (() => {
-        switch (e.key) {
-          case 'ArrowUp':
-          case 'w':
-          case 'W':
-            return direction !== 'down' ? 'up' : null
-          case 'ArrowDown':
-          case 's':
-          case 'S':
-            return direction !== 'up' ? 'down' : null
-          case 'ArrowLeft':
-          case 'a':
-          case 'A':
-            return direction !== 'right' ? 'left' : null
-          case 'ArrowRight':
-          case 'd':
-          case 'D':
-            return direction !== 'left' ? 'right' : null
-          default:
-            return null
-        }
-      })()
+  const handleKeyPress = useCallback((event: KeyboardEvent) => {
+    if (gameState !== 'playing') return
 
-      if (newDirection) {
+    const keyMap: Record<string, Direction> = {
+      'ArrowUp': 'up',
+      'ArrowDown': 'down',
+      'ArrowLeft': 'left',
+      'ArrowRight': 'right',
+      'w': 'up',
+      's': 'down',
+      'a': 'left',
+      'd': 'right'
+    }
+
+    const newDirection = keyMap[event.key]
+    if (newDirection) {
+      // Prevent reversing into self
+      const opposites: Record<Direction, Direction> = {
+        'up': 'down',
+        'down': 'up',
+        'left': 'right',
+        'right': 'left'
+      }
+
+      if (opposites[newDirection] !== direction) {
         setDirection(newDirection)
       }
-
-      // Pause/Resume
-      if (e.code === 'Space') {
-        e.preventDefault()
-        if (gameState === 'playing') {
-          pauseGame()
-        } else if (gameState === 'paused') {
-          resumeGame()
-        }
-      }
     }
 
-    window.addEventListener('keydown', handleKeyPress)
-    return () => window.removeEventListener('keydown', handleKeyPress)
+    if (event.key === ' ') {
+      event.preventDefault()
+      setGameState(prev => prev === 'playing' ? 'paused' : 'playing')
+    }
   }, [gameState, direction])
 
-  const renderBoard = () => {
-    const board = []
-    for (let y = 0; y < BOARD_SIZE; y++) {
-      for (let x = 0; x < BOARD_SIZE; x++) {
-        const isSnakeHead = snake[0]?.x === x && snake[0]?.y === y
-        const isSnakeBody = snake.slice(1).some(segment => segment.x === x && segment.y === y)
-        const isFood = food.x === x && food.y === y
-        
-        let cellClass = 'snake-cell '
-        if (isSnakeHead) cellClass += 'snake-head'
-        else if (isSnakeBody) cellClass += 'snake-body'
-        else if (isFood) cellClass += 'snake-food'
-        else cellClass += 'bg-secondary/20'
-        
-        board.push(
-          <div
-            key={`${x}-${y}`}
-            className={cellClass}
-          />
-        )
-      }
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [handleKeyPress])
+
+  useEffect(() => {
+    if (gameState === 'gameOver' && score > highScore) {
+      setHighScore(score)
+      localStorage.setItem('snake-high-score', score.toString())
     }
-    return board
+  }, [gameState, score, highScore])
+
+  const startGame = () => {
+    setSnake(INITIAL_SNAKE)
+    setFood(INITIAL_FOOD)
+    setDirection('right')
+    setScore(0)
+    setGameState('playing')
+  }
+
+  const resetGame = () => {
+    setSnake(INITIAL_SNAKE)
+    setFood(INITIAL_FOOD)
+    setDirection('right')
+    setScore(0)
+    setGameState('idle')
+  }
+
+  const getCellContent = (x: number, y: number): string => {
+    // Check if it's the snake head
+    if (snake[0] && snake[0].x === x && snake[0].y === y) {
+      return 'head'
+    }
+    
+    // Check if it's snake body
+    if (snake.some(segment => segment.x === x && segment.y === y)) {
+      return 'body'
+    }
+    
+    // Check if it's food
+    if (food.x === x && food.y === y) {
+      return 'food'
+    }
+    
+    return 'empty'
   }
 
   return (
-    <div className="game-container space-y-6">
+    <div className="space-y-6">
       {/* Game Header */}
-      <div className="text-center space-y-4">
-        <h2 className="text-3xl font-bold">Snake Game</h2>
+      <div className="text-center space-y-2">
+        <h2 className="text-3xl font-bold">🐍 Snake Game</h2>
+        <p className="text-muted-foreground">
+          Use arrow keys or WASD to move. Press space to pause.
+        </p>
+      </div>
+
+      {/* Game Stats */}
+      <div className="flex justify-center gap-6">
+        <div className="score-display">
+          <div className="text-sm text-muted-foreground">Score</div>
+          <div className="text-xl font-bold">{score}</div>
+        </div>
         
-        {/* Player Name Input */}
-        <div className="max-w-sm mx-auto">
-          <input
-            type="text"
-            placeholder="Enter your name"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            className="w-full px-3 py-2 bg-secondary border border-border rounded-md text-center"
-            maxLength={20}
-          />
+        <div className="score-display">
+          <div className="text-sm text-muted-foreground">High Score</div>
+          <div className="text-xl font-bold text-accent">{highScore}</div>
+        </div>
+        
+        <div className="score-display">
+          <div className="text-sm text-muted-foreground">Length</div>
+          <div className="text-xl font-bold">{snake.length}</div>
         </div>
       </div>
 
-      {/* Score Display */}
-      <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-        <div className="score-display text-center">
-          <div className="text-2xl font-bold text-primary">{score}</div>
-          <div className="text-xs text-muted-foreground">Score</div>
-        </div>
-        <div className="score-display text-center">
-          <div className="text-2xl font-bold text-accent">{highScore}</div>
-          <div className="text-xs text-muted-foreground">High Score</div>
-        </div>
-      </div>
-
-      {/* Game Board */}
-      <div className="max-w-md mx-auto">
+      {/* Game Grid */}
+      <div className="flex justify-center">
         <div 
-          className="grid gap-0 border border-border bg-muted/10 p-2"
+          className="inline-block p-4 bg-card border border-border rounded-lg"
           style={{ 
-            gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
-            aspectRatio: '1'
+            display: 'grid', 
+            gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
+            gap: '1px',
+            backgroundColor: 'hsl(var(--muted))'
           }}
         >
-          {renderBoard()}
+          {Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, index) => {
+            const x = index % GRID_SIZE
+            const y = Math.floor(index / GRID_SIZE)
+            const cellType = getCellContent(x, y)
+            
+            return (
+              <div
+                key={index}
+                className={`snake-cell ${
+                  cellType === 'head' ? 'snake-head' :
+                  cellType === 'body' ? 'snake-body' :
+                  cellType === 'food' ? 'snake-food' :
+                  'bg-background'
+                }`}
+              />
+            )
+          })}
         </div>
       </div>
 
-      {/* Controls Info */}
-      <div className="text-center text-sm text-muted-foreground">
-        <p>Use arrow keys or WASD to move • Space to pause</p>
-      </div>
-
-      {/* Game Status */}
-      <div className="text-center space-y-4">
+      {/* Game Controls */}
+      <div className="flex justify-center gap-4">
         {gameState === 'idle' && (
-          <div>
-            <p className="text-muted-foreground mb-4">Ready to start?</p>
-            <button onClick={startGame} className="game-button">
-              🐍 Start Game
-            </button>
-          </div>
+          <button onClick={startGame} className="game-button">
+            🎮 Start Game
+          </button>
         )}
-
+        
         {gameState === 'playing' && (
-          <div>
-            <p className="text-lg mb-4">
-              Length: <span className="font-bold text-accent">{snake.length}</span>
-            </p>
-            <button onClick={pauseGame} className="game-button-secondary">
-              ⏸️ Pause
-            </button>
-          </div>
+          <button onClick={() => setGameState('paused')} className="game-button">
+            ⏸️ Pause
+          </button>
         )}
-
+        
         {gameState === 'paused' && (
-          <div>
-            <p className="text-lg text-yellow-500 mb-4">Game Paused</p>
-            <div className="flex gap-2 justify-center">
-              <button onClick={resumeGame} className="game-button">
-                ▶️ Resume
-              </button>
-              <button onClick={resetGame} className="game-button-secondary">
-                🔄 Restart
-              </button>
-            </div>
-          </div>
+          <button onClick={() => setGameState('playing')} className="game-button">
+            ▶️ Resume
+          </button>
         )}
-
-        {gameState === 'gameOver' && (
-          <div className="space-y-4">
-            <div className="text-xl font-bold text-destructive">Game Over!</div>
-            <div className="text-lg">
-              Final Length: <span className="font-bold text-accent">{snake.length}</span>
-            </div>
-            
-            {score === highScore && score > 0 && (
-              <div className="text-lg font-bold text-primary">🎉 New High Score!</div>
-            )}
-            
-            {isSubmittingScore && (
-              <p className="text-muted-foreground">Saving score...</p>
-            )}
-            
-            <button onClick={startGame} className="game-button">
-              🔄 Play Again
-            </button>
-          </div>
+        
+        {(gameState === 'playing' || gameState === 'paused') && (
+          <button onClick={resetGame} className="game-button-secondary">
+            🔄 Reset
+          </button>
         )}
       </div>
+
+      {/* Game Over Screen */}
+      {gameState === 'gameOver' && (
+        <div className="text-center space-y-4 p-6 bg-destructive/10 border border-destructive rounded-lg">
+          <div className="text-4xl">💀</div>
+          <h3 className="text-2xl font-bold text-destructive">Game Over!</h3>
+          <p className="text-muted-foreground">
+            Final Score: <span className="font-bold">{score}</span>
+          </p>
+          {score === highScore && score > 0 && (
+            <p className="text-accent font-bold">🎉 New High Score!</p>
+          )}
+          <div className="flex justify-center gap-4">
+            <button onClick={startGame} className="game-button">
+              🎮 Play Again
+            </button>
+            <button onClick={resetGame} className="game-button-secondary">
+              🏠 Back to Menu
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pause Screen */}
+      {gameState === 'paused' && (
+        <div className="text-center space-y-4 p-6 bg-accent/10 border border-accent rounded-lg">
+          <div className="text-4xl">⏸️</div>
+          <h3 className="text-2xl font-bold text-accent">Game Paused</h3>
+          <p className="text-muted-foreground">
+            Press space or click Resume to continue
+          </p>
+        </div>
+      )}
     </div>
   )
 }

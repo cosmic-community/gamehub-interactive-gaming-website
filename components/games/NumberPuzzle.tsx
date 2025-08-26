@@ -1,292 +1,216 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { submitScore } from '@/lib/cosmic'
-import type { PuzzleTile, GameState } from '@/types'
+import type { PuzzleTile } from '@/types'
 
-const BOARD_SIZE = 4
-const EMPTY_TILE = 16
+const GRID_SIZE = 4
+const EMPTY_VALUE = 16
 
 export default function NumberPuzzle() {
-  const [tiles, setTiles] = useState<number[]>([])
-  const [gameState, setGameState] = useState<GameState>('idle')
-  const [moves, setMoves] = useState(0)
-  const [timer, setTimer] = useState(0)
-  const [bestScore, setBestScore] = useState<number | null>(null)
-  const [playerName, setPlayerName] = useState('')
-  const [isSubmittingScore, setIsSubmittingScore] = useState(false)
+  const [tiles, setTiles] = useState<PuzzleTile[]>([])
+  const [isComplete, setIsComplete] = useState(false)
+  const [moveCount, setMoveCount] = useState(0)
+  const [startTime, setStartTime] = useState<number | null>(null)
+  const [gameTime, setGameTime] = useState(0)
 
-  // Load best score from localStorage
+  // Initialize the puzzle
   useEffect(() => {
-    const savedBestScore = localStorage.getItem('number-puzzle-best-score')
-    if (savedBestScore) {
-      setBestScore(parseInt(savedBestScore))
-    }
+    initializePuzzle()
   }, [])
 
   // Timer effect
   useEffect(() => {
     let interval: NodeJS.Timeout
-    
-    if (gameState === 'playing') {
+    if (startTime && !isComplete) {
       interval = setInterval(() => {
-        setTimer(prev => prev + 1)
+        setGameTime(Math.floor((Date.now() - startTime) / 1000))
       }, 1000)
     }
+    return () => clearInterval(interval)
+  }, [startTime, isComplete])
+
+  const initializePuzzle = () => {
+    const initialTiles: PuzzleTile[] = []
     
-    return () => {
-      if (interval) clearInterval(interval)
+    // Create solved state first
+    for (let i = 1; i <= GRID_SIZE * GRID_SIZE; i++) {
+      initialTiles.push({
+        value: i,
+        position: i - 1
+      })
     }
-  }, [gameState])
-
-  // Generate solved state
-  const generateSolvedState = (): number[] => {
-    const solved = Array.from({ length: 15 }, (_, i) => i + 1)
-    solved.push(EMPTY_TILE) // Empty tile at the end
-    return solved
-  }
-
-  // Shuffle tiles with solvable configuration
-  const shuffleTiles = (): number[] => {
-    let shuffled: number[]
-    let inversions: number
     
-    do {
-      shuffled = generateSolvedState()
-      
-      // Fisher-Yates shuffle
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-      }
-      
-      // Count inversions to ensure puzzle is solvable
-      inversions = 0
-      for (let i = 0; i < shuffled.length - 1; i++) {
-        for (let j = i + 1; j < shuffled.length; j++) {
-          if (shuffled[i] !== EMPTY_TILE && shuffled[j] !== EMPTY_TILE && shuffled[i] > shuffled[j]) {
-            inversions++
-          }
+    // Shuffle the tiles (excluding the empty tile)
+    const shuffledTiles = [...initialTiles]
+    for (let i = 0; i < 1000; i++) {
+      const validMoves = getValidMoves(shuffledTiles)
+      if (validMoves.length > 0) {
+        const randomMoveIndex = Math.floor(Math.random() * validMoves.length)
+        const randomMove = validMoves[randomMoveIndex]
+        if (randomMove !== undefined) {
+          moveTile(shuffledTiles, randomMove.position)
         }
       }
+    }
+    
+    setTiles(shuffledTiles)
+    setIsComplete(false)
+    setMoveCount(0)
+    setStartTime(null)
+    setGameTime(0)
+  }
+
+  const getValidMoves = (currentTiles: PuzzleTile[]): PuzzleTile[] => {
+    const emptyTile = currentTiles.find(tile => tile.value === EMPTY_VALUE)
+    if (!emptyTile) return []
+    
+    const emptyRow = Math.floor(emptyTile.position / GRID_SIZE)
+    const emptyCol = emptyTile.position % GRID_SIZE
+    const validMoves: PuzzleTile[] = []
+
+    // Check adjacent positions
+    const directions = [
+      { row: -1, col: 0 }, // Up
+      { row: 1, col: 0 },  // Down
+      { row: 0, col: -1 }, // Left
+      { row: 0, col: 1 }   // Right
+    ]
+
+    directions.forEach(dir => {
+      const newRow = emptyRow + dir.row
+      const newCol = emptyCol + dir.col
       
-      // For 4x4 grid, puzzle is solvable if:
-      // - Grid width is odd and number of inversions is even
-      // - Grid width is even and (number of inversions + row of empty tile) is odd
-      const emptyRowFromBottom = Math.floor(shuffled.indexOf(EMPTY_TILE) / BOARD_SIZE)
-      const isSolvable = (inversions + emptyRowFromBottom) % 2 === 1
+      if (newRow >= 0 && newRow < GRID_SIZE && newCol >= 0 && newCol < GRID_SIZE) {
+        const adjacentPosition = newRow * GRID_SIZE + newCol
+        const adjacentTile = currentTiles.find(tile => tile.position === adjacentPosition)
+        if (adjacentTile) {
+          validMoves.push(adjacentTile)
+        }
+      }
+    })
+
+    return validMoves
+  }
+
+  const moveTile = (tilesArray: PuzzleTile[], tilePosition: number) => {
+    const emptyTile = tilesArray.find(tile => tile.value === EMPTY_VALUE)
+    const targetTile = tilesArray.find(tile => tile.position === tilePosition)
+    
+    if (emptyTile && targetTile) {
+      // Swap positions
+      const tempPosition = emptyTile.position
+      emptyTile.position = targetTile.position
+      targetTile.position = tempPosition
+    }
+  }
+
+  const handleTileClick = (clickedPosition: number) => {
+    if (isComplete) return
+
+    // Start timer on first move
+    if (!startTime) {
+      setStartTime(Date.now())
+    }
+
+    const validMoves = getValidMoves(tiles)
+    const isValidMove = validMoves.some(tile => tile.position === clickedPosition)
+    
+    if (isValidMove) {
+      const newTiles = [...tiles]
+      moveTile(newTiles, clickedPosition)
+      setTiles(newTiles)
+      setMoveCount(prev => prev + 1)
       
-      if (!isSolvable) continue
-      
-      // Make sure it's not already solved
-      const isSolved = shuffled.every((tile, index) => 
-        tile === (index < 15 ? index + 1 : EMPTY_TILE)
+      // Check if puzzle is complete
+      const isSolved = newTiles.every(tile => 
+        tile.value === EMPTY_VALUE || tile.value === tile.position + 1
       )
       
-      if (!isSolved) break
-      
-    } while (true)
-    
-    return shuffled
-  }
-
-  const startGame = () => {
-    const shuffledTiles = shuffleTiles()
-    setTiles(shuffledTiles)
-    setGameState('playing')
-    setMoves(0)
-    setTimer(0)
-  }
-
-  const resetGame = () => {
-    setTiles([])
-    setGameState('idle')
-    setMoves(0)
-    setTimer(0)
-  }
-
-  const getEmptyTileIndex = () => {
-    return tiles.indexOf(EMPTY_TILE)
-  }
-
-  const canMoveTile = (tileIndex: number): boolean => {
-    const emptyIndex = getEmptyTileIndex()
-    const tileRow = Math.floor(tileIndex / BOARD_SIZE)
-    const tileCol = tileIndex % BOARD_SIZE
-    const emptyRow = Math.floor(emptyIndex / BOARD_SIZE)
-    const emptyCol = emptyIndex % BOARD_SIZE
-    
-    return (
-      (Math.abs(tileRow - emptyRow) === 1 && tileCol === emptyCol) ||
-      (Math.abs(tileCol - emptyCol) === 1 && tileRow === emptyRow)
-    )
-  }
-
-  const moveTile = (tileIndex: number) => {
-    if (gameState !== 'playing') return
-    if (!canMoveTile(tileIndex)) return
-
-    const emptyIndex = getEmptyTileIndex()
-    const newTiles = [...tiles]
-    
-    // Swap tile with empty space
-    newTiles[emptyIndex] = newTiles[tileIndex]
-    newTiles[tileIndex] = EMPTY_TILE
-    
-    setTiles(newTiles)
-    setMoves(prev => prev + 1)
-  }
-
-  // Check if puzzle is solved
-  useEffect(() => {
-    if (tiles.length === 0 || gameState !== 'playing') return
-    
-    const isSolved = tiles.every((tile, index) => 
-      tile === (index < 15 ? index + 1 : EMPTY_TILE)
-    )
-    
-    if (isSolved) {
-      setGameState('gameOver')
-      
-      // Calculate score (lower is better: time + moves)
-      const score = Math.max(1000 - timer - moves, 50)
-      
-      // Update best score
-      if (!bestScore || score > bestScore) {
-        setBestScore(score)
-        localStorage.setItem('number-puzzle-best-score', score.toString())
-        
-        // Submit score if player name is provided
-        if (playerName.trim() && !isSubmittingScore) {
-          setIsSubmittingScore(true)
-          submitScore('number-puzzle', playerName.trim(), score)
-            .catch(error => console.error('Failed to submit score:', error))
-            .finally(() => setIsSubmittingScore(false))
-        }
+      if (isSolved) {
+        setIsComplete(true)
       }
     }
-  }, [tiles, gameState, timer, moves, bestScore, playerName, isSubmittingScore])
+  }
 
-  const formatTime = (seconds: number) => {
+  const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const getTileAtPosition = (position: number): PuzzleTile | undefined => {
+    return tiles.find(tile => tile.position === position)
+  }
+
   return (
-    <div className="game-container space-y-6">
+    <div className="space-y-6">
       {/* Game Header */}
-      <div className="text-center space-y-4">
-        <h2 className="text-3xl font-bold">Number Puzzle</h2>
+      <div className="text-center space-y-2">
+        <h2 className="text-3xl font-bold">🔢 Number Puzzle</h2>
+        <p className="text-muted-foreground">
+          Slide tiles to arrange numbers 1-15 in order
+        </p>
+      </div>
+
+      {/* Game Stats */}
+      <div className="flex justify-center gap-6">
+        <div className="score-display">
+          <div className="text-sm text-muted-foreground">Moves</div>
+          <div className="text-xl font-bold">{moveCount}</div>
+        </div>
         
-        {/* Player Name Input */}
-        <div className="max-w-sm mx-auto">
-          <input
-            type="text"
-            placeholder="Enter your name"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            className="w-full px-3 py-2 bg-secondary border border-border rounded-md text-center"
-            maxLength={20}
-          />
+        <div className="score-display">
+          <div className="text-sm text-muted-foreground">Time</div>
+          <div className="text-xl font-bold">{formatTime(gameTime)}</div>
         </div>
       </div>
 
-      {/* Stats Display */}
-      <div className="grid grid-cols-3 gap-4 max-w-md mx-auto">
-        <div className="score-display text-center">
-          <div className="text-xl font-bold text-primary">{formatTime(timer)}</div>
-          <div className="text-xs text-muted-foreground">Time</div>
-        </div>
-        <div className="score-display text-center">
-          <div className="text-xl font-bold text-accent">{moves}</div>
-          <div className="text-xs text-muted-foreground">Moves</div>
-        </div>
-        <div className="score-display text-center">
-          <div className="text-xl font-bold text-destructive">
-            {bestScore || '---'}
-          </div>
-          <div className="text-xs text-muted-foreground">Best</div>
-        </div>
-      </div>
-
-      {/* Game Board */}
-      <div className="max-w-sm mx-auto">
-        <div className="grid grid-cols-4 gap-1 p-4 bg-muted/20 rounded-lg">
-          {tiles.map((tile, index) => (
-            <button
-              key={index}
-              onClick={() => moveTile(index)}
-              className={`puzzle-tile aspect-square ${
-                tile === EMPTY_TILE 
-                  ? 'empty' 
-                  : canMoveTile(index) 
-                    ? 'hover:bg-primary/20 cursor-pointer' 
-                    : 'cursor-default'
-              }`}
-              disabled={gameState !== 'playing' || tile === EMPTY_TILE}
-            >
-              {tile !== EMPTY_TILE ? tile : ''}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Instructions */}
-      <div className="text-center text-sm text-muted-foreground max-w-md mx-auto">
-        <p>Click tiles adjacent to the empty space to slide them. Arrange numbers 1-15 in order!</p>
-      </div>
-
-      {/* Game Status */}
-      <div className="text-center space-y-4">
-        {gameState === 'idle' && (
-          <div>
-            <p className="text-muted-foreground mb-4">Ready to solve the puzzle?</p>
-            <button onClick={startGame} className="game-button">
-              🔢 Start Game
-            </button>
-          </div>
-        )}
-
-        {gameState === 'playing' && (
-          <div>
-            <p className="text-muted-foreground">
-              Slide tiles to arrange them in numerical order
-            </p>
-          </div>
-        )}
-
-        {gameState === 'gameOver' && (
-          <div className="space-y-4">
-            <div className="text-xl font-bold text-primary">🎉 Puzzle Solved!</div>
-            <div className="space-y-2">
-              <div className="text-lg">
-                Time: <span className="font-bold text-accent">{formatTime(timer)}</span>
-              </div>
-              <div className="text-lg">
-                Moves: <span className="font-bold text-primary">{moves}</span>
-              </div>
-              
-              {bestScore && timer + moves <= (1000 - bestScore) && (
-                <div className="text-lg font-bold text-destructive">🏆 New Best Score!</div>
-              )}
-            </div>
+      {/* Game Grid */}
+      <div className="flex justify-center">
+        <div className="grid grid-cols-4 gap-2 p-4 bg-card border border-border rounded-lg">
+          {Array.from({ length: GRID_SIZE * GRID_SIZE }, (_, position) => {
+            const tile = getTileAtPosition(position)
+            const isEmpty = tile?.value === EMPTY_VALUE
             
-            {isSubmittingScore && (
-              <p className="text-muted-foreground">Saving score...</p>
-            )}
-            
-            <div className="flex gap-2 justify-center">
-              <button onClick={startGame} className="game-button">
-                🔄 Play Again
-              </button>
-              <button onClick={resetGame} className="game-button-secondary">
-                ⬅️ Main Menu
-              </button>
-            </div>
-          </div>
-        )}
+            return (
+              <div
+                key={position}
+                className={`puzzle-tile ${isEmpty ? 'empty' : ''}`}
+                onClick={() => !isEmpty && handleTileClick(position)}
+              >
+                {!isEmpty && tile?.value}
+              </div>
+            )
+          })}
+        </div>
       </div>
+
+      {/* Game Controls */}
+      <div className="flex justify-center gap-4">
+        <button
+          onClick={initializePuzzle}
+          className="game-button"
+        >
+          🔄 New Game
+        </button>
+      </div>
+
+      {/* Victory Message */}
+      {isComplete && (
+        <div className="text-center space-y-4 p-6 bg-accent/10 border border-accent rounded-lg">
+          <div className="text-4xl">🎉</div>
+          <h3 className="text-2xl font-bold text-accent">Puzzle Complete!</h3>
+          <p className="text-muted-foreground">
+            Completed in {moveCount} moves and {formatTime(gameTime)}
+          </p>
+          <button
+            onClick={initializePuzzle}
+            className="game-button"
+          >
+            Play Again
+          </button>
+        </div>
+      )}
     </div>
   )
 }
