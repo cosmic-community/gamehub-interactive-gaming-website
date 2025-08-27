@@ -5,6 +5,10 @@ import SnakeGame from '@/components/games/SnakeGame'
 import MemoryMatch from '@/components/games/MemoryMatch'
 import NumberPuzzle from '@/components/games/NumberPuzzle'
 import WhackAMole from '@/components/games/WhackAMole'
+import Breakout from '@/components/games/Breakout'
+import Game2048 from '@/components/games/Game2048'
+import Asteroids from '@/components/games/Asteroids'
+import Tetris from '@/components/games/Tetris'
 
 interface GameContainerProps {
   gameId: string
@@ -23,6 +27,14 @@ export default function GameContainer({ gameId }: GameContainerProps) {
         return <NumberPuzzle />
       case 'whack-a-mole':
         return <WhackAMole />
+      case 'breakout':
+        return <Breakout />
+      case '2048':
+        return <Game2048 />
+      case 'asteroids':
+        return <Asteroids />
+      case 'tetris':
+        return <Tetris />
       default:
         return (
           <div className="game-container text-center py-12">

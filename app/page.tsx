@@ -43,6 +43,38 @@ const games = [
     icon: '🔨',
     difficulty: 'Medium',
     players: '1 Player'
+  },
+  {
+    id: 'breakout',
+    name: 'Breakout',
+    description: 'Break all the bricks with your paddle and ball. Classic arcade action!',
+    icon: '🎯',
+    difficulty: 'Medium',
+    players: '1 Player'
+  },
+  {
+    id: '2048',
+    name: '2048',
+    description: 'Merge tiles to reach 2048! Addictive number puzzle game.',
+    icon: '🎲',
+    difficulty: 'Hard',
+    players: '1 Player'
+  },
+  {
+    id: 'asteroids',
+    name: 'Asteroids',
+    description: 'Navigate space and destroy asteroids. Classic space shooter!',
+    icon: '🚀',
+    difficulty: 'Hard',
+    players: '1 Player'
+  },
+  {
+    id: 'tetris',
+    name: 'Tetris',
+    description: 'Arrange falling blocks to complete lines. The ultimate puzzle game!',
+    icon: '🟦',
+    difficulty: 'Hard', 
+    players: '1 Player'
   }
 ]
 

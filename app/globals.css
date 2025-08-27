@@ -49,6 +49,50 @@
   .neon-glow-red {
     @apply shadow-glow-red;
   }
+
+  .breakout-paddle {
+    @apply bg-primary rounded;
+  }
+  
+  .breakout-ball {
+    @apply bg-destructive rounded-full;
+  }
+  
+  .breakout-brick {
+    @apply border border-border rounded-sm;
+  }
+  
+  .grid-2048 {
+    @apply bg-muted border-2 border-border rounded-lg p-2;
+  }
+  
+  .tile-2048 {
+    @apply border border-border rounded font-bold flex items-center justify-center transition-all duration-200;
+  }
+  
+  .asteroids-ship {
+    @apply stroke-primary;
+  }
+  
+  .asteroids-asteroid {
+    @apply stroke-destructive;
+  }
+  
+  .asteroids-bullet {
+    @apply bg-accent rounded-full;
+  }
+  
+  .tetris-grid {
+    @apply border-2 border-border rounded bg-black p-2;
+  }
+  
+  .tetris-cell {
+    @apply border border-gray-800;
+  }
+  
+  .tetris-piece-preview {
+    @apply bg-card border border-border rounded p-2;
+  }
 }
 
 @layer utilities {
@@ -100,6 +144,53 @@
   }
 }
 
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(99, 102, 241, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.8);
+  }
+}
+
+@keyframes brick-break {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes asteroid-explode {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2) rotate(180deg);
+    opacity: 0;
+  }
+}
+
+@keyframes line-clear {
+  0% {
+    background-color: white;
+  }
+  50% {
+    background-color: yellow;
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
 .fade-in-scale {
   animation: fadeInScale 0.3s ease-out;
 }
@@ -110,6 +201,22 @@
 
 .pop {
   animation: pop 0.3s ease-in-out;
+}
+
+.glow-pulse {
+  animation: glow-pulse 2s infinite;
+}
+
+.brick-break {
+  animation: brick-break 0.3s ease-out;
+}
+
+.asteroid-explode {
+  animation: asteroid-explode 0.5s ease-out;
+}
+
+.line-clear {
+  animation: line-clear 0.5s ease-out;
 }
 
 /* Game-specific styles */
@@ -165,6 +272,23 @@
   @apply bg-destructive text-destructive-foreground neon-glow-red;
 }
 
+/* New game styles */
+.breakout-canvas {
+  @apply border-2 border-border rounded bg-black;
+}
+
+.tile-2048 {
+  @apply border border-border rounded font-bold flex items-center justify-center transition-all duration-200;
+}
+
+.asteroids-canvas {
+  @apply border-2 border-border rounded bg-black;
+}
+
+.tetris-canvas {
+  @apply border-2 border-border rounded bg-black;
+}
+
 /* Responsive adjustments */
 @media (max-width: 640px) {
   .tic-tac-toe-cell {
@@ -181,5 +305,25 @@
   
   .mole-hole {
     @apply w-16 h-16 text-3xl;
+  }
+  
+  .tile-2048 {
+    @apply w-14 h-14 text-sm;
+  }
+}
+
+/* Touch-specific improvements for ChromeOS */
+@media (pointer: coarse) {
+  .game-button,
+  .game-button-secondary {
+    @apply min-h-12 min-w-12;
+  }
+  
+  .snake-cell {
+    @apply w-6 h-6;
+  }
+  
+  .memory-card {
+    @apply min-h-16 min-w-16;
   }
 }

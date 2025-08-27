@@ -48,7 +48,7 @@ interface PlayerProfile extends CosmicObject {
 // Game states and types
 type GameState = 'idle' | 'playing' | 'paused' | 'gameOver';
 
-type GameType = 'tic-tac-toe' | 'snake' | 'memory-match' | 'number-puzzle' | 'whack-a-mole';
+type GameType = 'tic-tac-toe' | 'snake' | 'memory-match' | 'number-puzzle' | 'whack-a-mole' | 'breakout' | '2048' | 'asteroids' | 'tetris';
 
 // Tic-tac-toe specific types
 type Player = 'X' | 'O';
@@ -88,6 +88,67 @@ interface Mole {
   isActive: boolean;
   wasHit: boolean;
 }
+
+// Breakout game types
+interface BreakoutBall {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+}
+
+interface BreakoutPaddle {
+  x: number;
+  width: number;
+}
+
+interface BreakoutBrick {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visible: boolean;
+  color: string;
+}
+
+// 2048 game types
+type Grid2048 = (number | null)[][];
+
+// Asteroids game types
+interface AsteroidShip {
+  x: number;
+  y: number;
+  angle: number;
+  dx: number;
+  dy: number;
+}
+
+interface Asteroid {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  size: number;
+  angle: number;
+}
+
+interface Bullet {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  life: number;
+}
+
+// Tetris game types
+interface TetrisPiece {
+  shape: number[][];
+  x: number;
+  y: number;
+  color: string;
+}
+
+type TetrisGrid = string[][];
 
 // API response types
 interface CosmicResponse<T> {
@@ -129,6 +190,15 @@ export type {
   MemoryCard,
   PuzzleTile,
   Mole,
+  BreakoutBall,
+  BreakoutPaddle,
+  BreakoutBrick,
+  Grid2048,
+  AsteroidShip,
+  Asteroid,
+  Bullet,
+  TetrisPiece,
+  TetrisGrid,
   CosmicResponse,
   CreateGameScoreData
 };

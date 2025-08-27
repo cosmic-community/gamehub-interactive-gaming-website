@@ -27,6 +27,26 @@ const games = {
     name: 'Whack-a-Mole',
     description: 'Hit the moles as they pop up!',
     icon: '🔨'
+  },
+  'breakout': {
+    name: 'Breakout',
+    description: 'Break all the bricks with your paddle and ball.',
+    icon: '🎯'
+  },
+  '2048': {
+    name: '2048',
+    description: 'Merge tiles to reach 2048!',
+    icon: '🎲'
+  },
+  'asteroids': {
+    name: 'Asteroids',
+    description: 'Navigate space and destroy asteroids.',
+    icon: '🚀'
+  },
+  'tetris': {
+    name: 'Tetris',
+    description: 'Arrange falling blocks to complete lines.',
+    icon: '🟦'
   }
 }
 

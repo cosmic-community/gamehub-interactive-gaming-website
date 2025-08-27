@@ -14,7 +14,11 @@ export default function Leaderboard({ scores, showGameName = false }: Leaderboar
       'snake': 'Snake',
       'memory-match': 'Memory Match', 
       'number-puzzle': 'Number Puzzle',
-      'whack-a-mole': 'Whack-a-Mole'
+      'whack-a-mole': 'Whack-a-Mole',
+      'breakout': 'Breakout',
+      '2048': '2048',
+      'asteroids': 'Asteroids',
+      'tetris': 'Tetris'
     }
     return gameNames[gameId] || gameId
   }
