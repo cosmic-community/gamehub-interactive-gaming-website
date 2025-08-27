@@ -1,229 +1,93 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { SnakeSegment, Food, Direction, GameState } from '@/types'
-import { submitScore } from '@/lib/cosmic'
 
-const GRID_SIZE = 20
-const INITIAL_SNAKE: SnakeSegment[] = [{ x: 10, y: 10 }]
-const INITIAL_FOOD: Food = { x: 15, y: 15 }
-const INITIAL_DIRECTION: Direction = 'right'
-
-export default function SnakeGame() {
-  const [snake, setSnake] = useState<SnakeSegment[]>(INITIAL_SNAKE)
-  const [food, setFood] = useState<Food>(INITIAL_FOOD)
-  const [direction, setDirection] = useState<Direction>(INITIAL_DIRECTION)
+export default function SnakeGame({ onGameEnd }: { onGameEnd: (score: number) => void }) {
+  const [snake, setSnake] = useState<SnakeSegment[]>([{ x: 10, y: 10 }])
+  const [food, setFood] = useState<Food>({ x: 15, y: 15 })
+  const [direction, setDirection] = useState<Direction>('right')
   const [gameState, setGameState] = useState<GameState>('idle')
   const [score, setScore] = useState(0)
-  const [gameSpeed, setGameSpeed] = useState(200)
-  const [playerName, setPlayerName] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showNameInput, setShowNameInput] = useState(false)
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
+  const [speed, setSpeed] = useState(200)
   
-  const gameLoopRef = useRef<NodeJS.Timeout>()
-  const directionRef = useRef<Direction>(INITIAL_DIRECTION)
-  const gameContainerRef = useRef<HTMLDivElement>(null)
+  const gameLoopRef = useRef<NodeJS.Timeout | null>(null)
+  const gridSize = 20
+  const canvasSize = 400
 
   // Generate random food position
-  const generateFood = useCallback((): Food => {
+  const generateFood = useCallback((currentSnake: SnakeSegment[]): Food => {
     let newFood: Food
     do {
       newFood = {
-        x: Math.floor(Math.random() * GRID_SIZE),
-        y: Math.floor(Math.random() * GRID_SIZE)
+        x: Math.floor(Math.random() * gridSize),
+        y: Math.floor(Math.random() * gridSize)
       }
-    } while (snake.some(segment => segment.x === newFood.x && segment.y === newFood.y))
+    } while (currentSnake.some(segment => segment.x === newFood.x && segment.y === newFood.y))
+    
     return newFood
-  }, [snake])
-
-  // Check collision with walls or self
-  const checkCollision = useCallback((head: SnakeSegment, snakeBody: SnakeSegment[]): boolean => {
-    // Wall collision
-    if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
-      return true
-    }
-    // Self collision
-    return snakeBody.some(segment => segment.x === head.x && segment.y === head.y)
   }, [])
 
-  // Game loop
-  const gameLoop = useCallback(() => {
+  // Move snake
+  const moveSnake = useCallback(() => {
     setSnake(currentSnake => {
-      const newSnake = [...currentSnake]
-      const head = { ...newSnake[0] }
+      if (currentSnake.length === 0) return currentSnake
+      
+      const head = currentSnake[0]
+      if (!head) return currentSnake // Fix: Check if head exists
+      
+      let newHead: SnakeSegment = { x: head.x, y: head.y }
 
-      // Move head based on direction
-      switch (directionRef.current) {
+      // Move based on direction
+      switch (direction) {
         case 'up':
-          head.y -= 1
+          newHead.y = head.y !== undefined ? head.y - 1 : 0 // Fix: Handle undefined
           break
         case 'down':
-          head.y += 1
+          newHead.y = head.y !== undefined ? head.y + 1 : 0 // Fix: Handle undefined
           break
         case 'left':
-          head.x -= 1
+          newHead.x = head.x !== undefined ? head.x - 1 : 0 // Fix: Handle undefined
           break
         case 'right':
-          head.x += 1
+          newHead.x = head.x !== undefined ? head.x + 1 : 0 // Fix: Handle undefined
           break
       }
 
-      // Check collision
-      if (checkCollision(head, newSnake)) {
+      // Check wall collision
+      if (newHead.x < 0 || newHead.x >= gridSize || newHead.y < 0 || newHead.y >= gridSize) {
         setGameState('gameOver')
-        setShowNameInput(true)
         return currentSnake
       }
 
-      newSnake.unshift(head)
+      // Check self collision
+      if (currentSnake.some(segment => segment.x === newHead.x && segment.y === newHead.y)) {
+        setGameState('gameOver')
+        return currentSnake
+      }
 
-      // Check if food eaten
-      if (head.x === food.x && head.y === food.y) {
+      const newSnake = [newHead, ...currentSnake]
+
+      // Check food collision
+      if (newHead.x === food.x && newHead.y === food.y) {
         setScore(prev => prev + 10)
-        setFood(generateFood())
-        // Increase speed slightly
-        setGameSpeed(prev => Math.max(100, prev - 5))
+        setFood(generateFood(newSnake)) // Fix: Pass valid SnakeSegment array
+        setSpeed(prev => Math.max(100, prev - 5)) // Increase speed
+        return newSnake
       } else {
-        newSnake.pop()
+        return newSnake.slice(0, -1) // Remove tail if no food eaten
       }
-
-      return newSnake
     })
-  }, [food, generateFood, checkCollision])
-
-  // Enhanced keyboard handling for ChromeOS compatibility
-  const handleKeyPress = useCallback((e: KeyboardEvent) => {
-    if (gameState !== 'playing') return
-    
-    // Prevent default behavior for arrow keys
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-      e.preventDefault()
-    }
-
-    let newDirection: Direction | null = null
-
-    // Handle both arrow keys and WASD keys for better compatibility
-    switch (e.code) {
-      case 'ArrowUp':
-      case 'KeyW':
-        if (directionRef.current !== 'down') newDirection = 'up'
-        break
-      case 'ArrowDown':
-      case 'KeyS':
-        if (directionRef.current !== 'up') newDirection = 'down'
-        break
-      case 'ArrowLeft':
-      case 'KeyA':
-        if (directionRef.current !== 'right') newDirection = 'left'
-        break
-      case 'ArrowRight':
-      case 'KeyD':
-        if (directionRef.current !== 'left') newDirection = 'right'
-        break
-      case 'Space':
-        e.preventDefault()
-        togglePause()
-        break
-    }
-
-    if (newDirection) {
-      directionRef.current = newDirection
-      setDirection(newDirection)
-    }
-  }, [gameState])
-
-  // Touch handling for mobile and ChromeOS touch devices
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    if (gameState !== 'playing') return
-    
-    const touch = e.touches[0]
-    if (!touch) return
-    
-    setTouchStart({
-      x: touch.clientX,
-      y: touch.clientY
-    })
-  }, [gameState])
-
-  const handleTouchEnd = useCallback((e: TouchEvent) => {
-    if (gameState !== 'playing' || !touchStart) return
-    
-    const touch = e.changedTouches[0]
-    if (!touch) return
-
-    const deltaX = touch.clientX - touchStart.x
-    const deltaY = touch.clientY - touchStart.y
-    const minSwipeDistance = 50
-
-    // Determine swipe direction
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      // Horizontal swipe
-      if (Math.abs(deltaX) > minSwipeDistance) {
-        if (deltaX > 0 && directionRef.current !== 'left') {
-          directionRef.current = 'right'
-          setDirection('right')
-        } else if (deltaX < 0 && directionRef.current !== 'right') {
-          directionRef.current = 'left'
-          setDirection('left')
-        }
-      }
-    } else {
-      // Vertical swipe
-      if (Math.abs(deltaY) > minSwipeDistance) {
-        if (deltaY > 0 && directionRef.current !== 'up') {
-          directionRef.current = 'down'
-          setDirection('down')
-        } else if (deltaY < 0 && directionRef.current !== 'down') {
-          directionRef.current = 'up'
-          setDirection('up')
-        }
-      }
-    }
-
-    setTouchStart(null)
-  }, [gameState, touchStart])
-
-  // Enhanced event listeners setup
-  useEffect(() => {
-    const container = gameContainerRef.current
-    if (!container) return
-
-    // Multiple event listener strategies for ChromeOS compatibility
-    const handleKeyDown = (e: KeyboardEvent) => handleKeyPress(e)
-    const handleKeyUp = (e: KeyboardEvent) => handleKeyPress(e)
-    
-    // Add event listeners to document and container
-    document.addEventListener('keydown', handleKeyDown, { passive: false })
-    document.addEventListener('keyup', handleKeyUp, { passive: false })
-    container.addEventListener('keydown', handleKeyDown, { passive: false })
-    container.addEventListener('keyup', handleKeyUp, { passive: false })
-    
-    // Touch events for swipe controls
-    container.addEventListener('touchstart', handleTouchStart, { passive: true })
-    container.addEventListener('touchend', handleTouchEnd, { passive: true })
-    
-    // Focus the container to ensure it can receive keyboard events
-    container.setAttribute('tabindex', '0')
-    container.focus()
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.removeEventListener('keyup', handleKeyUp)
-      container.removeEventListener('keydown', handleKeyDown)
-      container.removeEventListener('keyup', handleKeyUp)
-      container.removeEventListener('touchstart', handleTouchStart)
-      container.removeEventListener('touchend', handleTouchEnd)
-    }
-  }, [handleKeyPress, handleTouchStart, handleTouchEnd])
+  }, [direction, food, generateFood])
 
   // Game loop
   useEffect(() => {
     if (gameState === 'playing') {
-      gameLoopRef.current = setInterval(gameLoop, gameSpeed)
+      gameLoopRef.current = setInterval(moveSnake, speed)
     } else {
       if (gameLoopRef.current) {
         clearInterval(gameLoopRef.current)
+        gameLoopRef.current = null
       }
     }
 
@@ -232,325 +96,258 @@ export default function SnakeGame() {
         clearInterval(gameLoopRef.current)
       }
     }
-  }, [gameState, gameSpeed, gameLoop])
+  }, [gameState, moveSnake, speed])
 
-  const startGame = () => {
-    setSnake(INITIAL_SNAKE)
-    setFood(INITIAL_FOOD)
-    setDirection(INITIAL_DIRECTION)
-    directionRef.current = INITIAL_DIRECTION
-    setScore(0)
-    setGameSpeed(200)
-    setGameState('playing')
-    setShowNameInput(false)
-    
-    // Focus container for keyboard events
-    if (gameContainerRef.current) {
-      gameContainerRef.current.focus()
+  // Handle game over
+  useEffect(() => {
+    if (gameState === 'gameOver') {
+      if (gameLoopRef.current) {
+        clearInterval(gameLoopRef.current)
+        gameLoopRef.current = null
+      }
+      onGameEnd(score)
     }
-  }
+  }, [gameState, score, onGameEnd])
 
-  const togglePause = () => {
-    if (gameState === 'playing') {
-      setGameState('paused')
-    } else if (gameState === 'paused') {
-      setGameState('playing')
-      if (gameContainerRef.current) {
-        gameContainerRef.current.focus()
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (gameState !== 'playing') return
+
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault()
+          setDirection(current => current !== 'down' ? 'up' : current)
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          setDirection(current => current !== 'up' ? 'down' : current)
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          setDirection(current => current !== 'right' ? 'left' : current)
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          setDirection(current => current !== 'left' ? 'right' : current)
+          break
+        case ' ':
+          e.preventDefault()
+          if (gameState === 'playing') {
+            setGameState('paused')
+          }
+          break
       }
     }
-  }
 
-  const resetGame = () => {
-    setGameState('idle')
-    setSnake(INITIAL_SNAKE)
-    setFood(INITIAL_FOOD)
-    setDirection(INITIAL_DIRECTION)
-    directionRef.current = INITIAL_DIRECTION
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [gameState])
+
+  // Touch controls for mobile
+  useEffect(() => {
+    let startX = 0
+    let startY = 0
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0]
+      if (touch) {
+        startX = touch.clientX
+        startY = touch.clientY
+      }
+    }
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (gameState !== 'playing') return
+      
+      const touch = e.changedTouches[0]
+      if (!touch) return
+
+      const deltaX = touch.clientX - startX
+      const deltaY = touch.clientY - startY
+      const minSwipeDistance = 30
+
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (Math.abs(deltaX) > minSwipeDistance) {
+          const newDirection = deltaX > 0 ? 'right' : 'left'
+          setDirection(current => 
+            (newDirection === 'right' && current !== 'left') || 
+            (newDirection === 'left' && current !== 'right') 
+              ? newDirection 
+              : current
+          )
+        }
+      } else {
+        if (Math.abs(deltaY) > minSwipeDistance) {
+          const newDirection = deltaY > 0 ? 'down' : 'up'
+          setDirection(current => 
+            (newDirection === 'down' && current !== 'up') || 
+            (newDirection === 'up' && current !== 'down') 
+              ? newDirection 
+              : current
+          )
+        }
+      }
+    }
+
+    document.addEventListener('touchstart', handleTouchStart)
+    document.addEventListener('touchend', handleTouchEnd)
+    
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart)
+      document.removeEventListener('touchend', handleTouchEnd)
+    }
+  }, [gameState])
+
+  const startGame = () => {
+    setSnake([{ x: 10, y: 10 }])
+    setFood({ x: 15, y: 15 })
+    setDirection('right')
     setScore(0)
-    setGameSpeed(200)
-    setShowNameInput(false)
+    setSpeed(200)
+    setGameState('playing')
   }
 
-  const handleScoreSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!playerName.trim() || score === 0) return
-
-    setIsSubmitting(true)
-    try {
-      await submitScore('snake', playerName.trim(), score)
-      setShowNameInput(false)
-      resetGame()
-    } catch (error) {
-      console.error('Failed to submit score:', error)
-    } finally {
-      setIsSubmitting(false)
-    }
+  const pauseGame = () => {
+    setGameState('paused')
   }
 
-  const handleDirectionButton = (newDirection: Direction) => {
-    if (gameState !== 'playing') return
-    
-    // Prevent opposite direction
-    const opposites: Record<Direction, Direction> = {
-      up: 'down',
-      down: 'up', 
-      left: 'right',
-      right: 'left'
-    }
-    
-    if (directionRef.current !== opposites[newDirection]) {
-      directionRef.current = newDirection
-      setDirection(newDirection)
-    }
+  const resumeGame = () => {
+    setGameState('playing')
   }
+
+  const cellSize = canvasSize / gridSize
 
   return (
-    <div className="space-y-6">
-      {/* Game Info */}
-      <div className="game-container">
-        <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-          <div className="score-display">
-            Score: {score}
-          </div>
-          <div className="score-display">
-            Length: {snake.length}
-          </div>
-          <div className="score-display">
-            Speed: {Math.round(300 - gameSpeed)}
-          </div>
+    <div className="snake-game space-y-6">
+      {/* Game Stats */}
+      <div className="flex justify-between items-center">
+        <div className="score-display">
+          Score: {score.toLocaleString()}
         </div>
-
-        {/* Control Instructions */}
-        <div className="text-center text-sm text-muted-foreground mb-4">
-          <p className="mb-2">
-            <strong>Controls:</strong> Arrow Keys / WASD / Touch Swipe / Direction Buttons
-          </p>
-          <p>Press Space to pause • Eat food to grow and increase speed!</p>
-        </div>
-
-        {/* Game Controls */}
-        <div className="flex flex-wrap justify-center gap-3 mb-4">
-          {gameState === 'idle' && (
-            <button onClick={startGame} className="game-button">
-              🎮 Start Game
-            </button>
-          )}
-          
-          {gameState === 'playing' && (
-            <>
-              <button onClick={togglePause} className="game-button-secondary">
-                ⏸️ Pause
-              </button>
-              <button onClick={resetGame} className="game-button-secondary">
-                🔄 Reset
-              </button>
-            </>
-          )}
-          
-          {gameState === 'paused' && (
-            <>
-              <button onClick={togglePause} className="game-button">
-                ▶️ Resume
-              </button>
-              <button onClick={resetGame} className="game-button-secondary">
-                🔄 Reset
-              </button>
-            </>
-          )}
-          
-          {gameState === 'gameOver' && !showNameInput && (
-            <button onClick={startGame} className="game-button">
-              🎮 Play Again
-            </button>
-          )}
+        <div className="score-display">
+          Speed: {Math.round((300 - speed) / 10)}
         </div>
       </div>
 
       {/* Game Board */}
-      <div 
-        ref={gameContainerRef}
-        className="game-container focus:outline-none focus:ring-2 focus:ring-primary"
-        tabIndex={0}
-        style={{ 
-          touchAction: 'none',  // Prevent default touch behaviors
-          userSelect: 'none'    // Prevent text selection
-        }}
-      >
-        {/* Game Status */}
+      <div className="flex justify-center">
+        <div 
+          className="relative bg-card border-2 border-border rounded-lg"
+          style={{ width: canvasSize, height: canvasSize }}
+        >
+          {/* Grid */}
+          <div className="absolute inset-0 grid grid-cols-20 grid-rows-20 gap-0">
+            {Array.from({ length: gridSize * gridSize }, (_, index) => {
+              const x = index % gridSize
+              const y = Math.floor(index / gridSize)
+              
+              const isSnake = snake.some(segment => segment.x === x && segment.y === y)
+              const isHead = snake[0]?.x === x && snake[0]?.y === y
+              const isFood = food.x === x && food.y === y
+              
+              let className = 'snake-cell'
+              if (isFood) {
+                className += ' snake-food'
+              } else if (isHead) {
+                className += ' snake-head'
+              } else if (isSnake) {
+                className += ' snake-body'
+              }
+              
+              return (
+                <div
+                  key={index}
+                  className={className}
+                />
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Game Controls */}
+      <div className="flex justify-center gap-4">
         {gameState === 'idle' && (
-          <div className="text-center py-8">
-            <div className="text-4xl mb-4">🐍</div>
-            <h3 className="text-xl font-bold mb-2">Ready to Play Snake?</h3>
-            <p className="text-muted-foreground">Click Start Game to begin!</p>
-          </div>
+          <button onClick={startGame} className="game-button">
+            🎮 Start Game
+          </button>
         )}
-
+        
+        {gameState === 'playing' && (
+          <button onClick={pauseGame} className="game-button-secondary">
+            ⏸️ Pause
+          </button>
+        )}
+        
         {gameState === 'paused' && (
-          <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10 rounded-lg">
-            <div className="text-center">
-              <div className="text-4xl mb-4">⏸️</div>
-              <h3 className="text-xl font-bold">Game Paused</h3>
-              <p className="text-muted-foreground">Press Resume to continue</p>
-            </div>
-          </div>
+          <>
+            <button onClick={resumeGame} className="game-button">
+              ▶️ Resume
+            </button>
+            <button onClick={startGame} className="game-button-secondary">
+              🔄 Restart
+            </button>
+          </>
         )}
-
+        
         {gameState === 'gameOver' && (
-          <div className="absolute inset-0 bg-background/90 flex items-center justify-center z-10 rounded-lg">
-            <div className="text-center space-y-4">
-              <div className="text-4xl">💀</div>
-              <h3 className="text-xl font-bold">Game Over!</h3>
-              <p className="text-muted-foreground">Final Score: {score}</p>
-              
-              {!showNameInput && score > 0 && (
-                <button 
-                  onClick={() => setShowNameInput(true)}
-                  className="game-button"
-                >
-                  🏆 Save High Score
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Snake Game Grid */}
-        {(gameState === 'playing' || gameState === 'paused') && (
-          <div className="relative mx-auto" style={{ width: 'fit-content' }}>
-            <div 
-              className="grid border-2 border-border rounded bg-muted/20"
-              style={{ 
-                gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
-                width: `${GRID_SIZE * 16}px`,
-                height: `${GRID_SIZE * 16}px`
-              }}
-            >
-              {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, index) => {
-                const x = index % GRID_SIZE
-                const y = Math.floor(index / GRID_SIZE)
-                
-                const isSnakeHead = snake[0]?.x === x && snake[0]?.y === y
-                const isSnakeBody = snake.slice(1).some(segment => segment.x === x && segment.y === y)
-                const isFood = food.x === x && food.y === y
-                
-                let cellClass = 'snake-cell'
-                if (isSnakeHead) cellClass += ' snake-head'
-                else if (isSnakeBody) cellClass += ' snake-body'
-                else if (isFood) cellClass += ' snake-food'
-                
-                return (
-                  <div
-                    key={index}
-                    className={cellClass}
-                  />
-                )
-              })}
-            </div>
-
-            {/* Touch Control Buttons for ChromeOS */}
-            <div className="mt-6 grid grid-cols-3 gap-2 max-w-48 mx-auto">
-              <div></div>
-              <button 
-                onClick={() => handleDirectionButton('up')}
-                className="game-button-secondary p-3 text-2xl"
-                disabled={gameState !== 'playing'}
-              >
-                ⬆️
-              </button>
-              <div></div>
-              
-              <button 
-                onClick={() => handleDirectionButton('left')}
-                className="game-button-secondary p-3 text-2xl"
-                disabled={gameState !== 'playing'}
-              >
-                ⬅️
-              </button>
-              <button 
-                onClick={togglePause}
-                className="game-button-secondary p-3 text-xl"
-                disabled={gameState === 'idle' || gameState === 'gameOver'}
-              >
-                {gameState === 'playing' ? '⏸️' : '▶️'}
-              </button>
-              <button 
-                onClick={() => handleDirectionButton('right')}
-                className="game-button-secondary p-3 text-2xl"
-                disabled={gameState !== 'playing'}
-              >
-                ➡️
-              </button>
-              
-              <div></div>
-              <button 
-                onClick={() => handleDirectionButton('down')}
-                className="game-button-secondary p-3 text-2xl"
-                disabled={gameState !== 'playing'}
-              >
-                ⬇️
-              </button>
-              <div></div>
-            </div>
-          </div>
+          <button onClick={startGame} className="game-button">
+            🔄 Play Again
+          </button>
         )}
       </div>
 
-      {/* Score Submission Form */}
-      {showNameInput && (
-        <div className="game-container">
-          <form onSubmit={handleScoreSubmit} className="space-y-4">
-            <h3 className="text-xl font-bold text-center">🏆 Save Your Score!</h3>
-            <p className="text-center text-muted-foreground">
-              You scored {score} points! Enter your name to save it to the leaderboard.
-            </p>
-            
-            <div className="space-y-3">
-              <input
-                type="text"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                placeholder="Enter your name"
-                className="w-full px-4 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                maxLength={20}
-                required
-                autoFocus
-              />
-              
-              <div className="flex gap-3">
-                <button 
-                  type="submit" 
-                  disabled={!playerName.trim() || isSubmitting}
-                  className="game-button flex-1 disabled:opacity-50"
-                >
-                  {isSubmitting ? '💾 Saving...' : '💾 Save Score'}
-                </button>
-                
-                <button 
-                  type="button"
-                  onClick={() => setShowNameInput(false)}
-                  className="game-button-secondary"
-                  disabled={isSubmitting}
-                >
-                  Skip
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
+      {/* Mobile Controls */}
+      <div className="grid grid-cols-3 gap-2 max-w-48 mx-auto md:hidden">
+        <div></div>
+        <button
+          onClick={() => setDirection(current => current !== 'down' ? 'up' : current)}
+          disabled={gameState !== 'playing'}
+          className="game-button text-2xl p-2"
+        >
+          ⬆️
+        </button>
+        <div></div>
+        
+        <button
+          onClick={() => setDirection(current => current !== 'right' ? 'left' : current)}
+          disabled={gameState !== 'playing'}
+          className="game-button text-2xl p-2"
+        >
+          ⬅️
+        </button>
+        <button
+          onClick={gameState === 'playing' ? pauseGame : resumeGame}
+          disabled={gameState === 'idle' || gameState === 'gameOver'} // Fix: Correct state comparison
+          className="game-button-secondary text-xl p-2"
+        >
+          {gameState === 'playing' ? '⏸️' : '▶️'}
+        </button>
+        <button
+          onClick={() => setDirection(current => current !== 'left' ? 'right' : current)}
+          disabled={gameState !== 'playing'}
+          className="game-button text-2xl p-2"
+        >
+          ➡️
+        </button>
+        
+        <div></div>
+        <button
+          onClick={() => setDirection(current => current !== 'up' ? 'down' : current)}
+          disabled={gameState !== 'playing'}
+          className="game-button text-2xl p-2"
+        >
+          ⬇️
+        </button>
+        <div></div>
+      </div>
 
-      {/* Game Tips */}
-      <div className="game-container">
-        <h3 className="text-lg font-bold mb-3">🎯 Game Tips</h3>
-        <ul className="text-sm text-muted-foreground space-y-2">
-          <li>• Use arrow keys, WASD, or touch swipes to control the snake</li>
-          <li>• Eat the red food to grow longer and increase your score</li>
-          <li>• The game gets faster as you score more points</li>
-          <li>• Don't hit the walls or your own tail</li>
-          <li>• Press Space to pause/unpause the game</li>
-          <li>• On ChromeOS: Use on-screen direction buttons if keyboard doesn't respond</li>
-        </ul>
+      {/* Instructions */}
+      <div className="text-center text-sm text-muted-foreground space-y-1">
+        <p>Use arrow keys, swipe, or mobile controls to move</p>
+        <p>Eat the red food to grow and increase your score!</p>
+        <p>Press spacebar to pause</p>
       </div>
     </div>
   )
